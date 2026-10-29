@@ -137,7 +137,311 @@ module hart #(
     ,`RVFI_OUTPUTS,
 `endif
 );
-    // Fill in your implementation here.
+    localparam [31:0] NOP = 32'h00000013; // addi x0, x0, 0
+
+    // IF Stage outputs 
+    wire [31:0] if_pc;
+    wire [31:0] if_pc4;
+    wire [31:0] if_inst;
+
+    // ID Stage outputs
+    wire        redirect;
+    wire [31:0] redirect_pc;
+    wire        IF_Stall;
+    wire        ID_Stall;
+    wire        id_ALU_src;
+    wire        id_auipc;
+    wire        id_ALU_sub;
+    wire [ 2:0] id_ALU_sel;
+    wire        id_ALU_unsigned;
+    wire        id_ALU_arith;
+    wire        id_mem_read;
+    wire        id_mem_write;
+    wire [ 2:0] id_funct3;
+    wire        id_reg_write;
+    wire        id_mem_to_reg;
+    wire        id_link;        // jal | jalr, writes pc + 4 to rd
+    wire        id_is_lui;
+    wire [31:0] id_rs1_data;
+    wire [31:0] id_rs2_data;
+    wire [31:0] id_imm;
+    wire [ 4:0] id_rs1_addr;
+    wire [ 4:0] id_rs2_addr;
+    wire [ 4:0] id_rd;
+    wire [31:0] id_next_pc;
+    wire        id_trap;        // misaligned branch/jump target
+    wire        id_halt;        // ebreak
+
+    // EX Stage outputs
+    wire [31:0] ex_alu_result;
+    wire [31:0] ex_result;
+
+    // MEM Stage outputs
+    wire [31:0] mem_load_data;  // shifted and sign/zero extended
+    wire        mem_misaligned;
+
+    // WB Stage outputs
+    wire [31:0] wb_data;
+
+    // Pipeline register contents
+    // IF/ID
+    reg         IF_ID_valid;
+    reg  [31:0] IF_ID_pc;
+    reg  [31:0] IF_ID_pc4;
+    reg  [31:0] IF_ID_inst;
+
+    // ID/EX
+    reg         ID_EX_valid;
+    reg  [31:0] ID_EX_pc;
+    reg  [31:0] ID_EX_pc4;
+    reg  [31:0] ID_EX_inst;
+    reg  [31:0] ID_EX_next_pc;
+    reg  [31:0] ID_EX_rs1_data;
+    reg  [31:0] ID_EX_rs2_data;
+    reg  [31:0] ID_EX_imm;
+    reg  [ 4:0] ID_EX_rs1_addr;
+    reg  [ 4:0] ID_EX_rs2_addr;
+    reg  [ 4:0] ID_EX_rd;
+    reg         ID_EX_ALU_src;
+    reg         ID_EX_auipc;
+    reg         ID_EX_ALU_sub;
+    reg  [ 2:0] ID_EX_ALU_sel;
+    reg         ID_EX_ALU_unsigned;
+    reg         ID_EX_ALU_arith;
+    reg         ID_EX_mem_read;
+    reg         ID_EX_mem_write;
+    reg  [ 2:0] ID_EX_funct3;
+    reg         ID_EX_RegWrite;
+    reg         ID_EX_mem_to_reg;
+    reg         ID_EX_link;
+    reg         ID_EX_is_lui;
+    reg         ID_EX_trap;
+    reg         ID_EX_halt;
+
+    // EX/MEM
+    reg         EX_MEM_valid;
+    reg  [31:0] EX_MEM_pc;
+    reg  [31:0] EX_MEM_inst;
+    reg  [31:0] EX_MEM_next_pc;
+    reg  [31:0] EX_MEM_result;      // address for loads/stores, else rd value
+    reg  [31:0] EX_MEM_rs1_data;
+    reg  [31:0] EX_MEM_rs2_data;    // store data
+    reg  [ 4:0] EX_MEM_rs1_addr;
+    reg  [ 4:0] EX_MEM_rs2_addr;
+    reg  [ 4:0] EX_MEM_rd;
+    reg         EX_MEM_mem_read;
+    reg         EX_MEM_mem_write;
+    reg  [ 2:0] EX_MEM_funct3;
+    reg         EX_MEM_RegWrite;
+    reg         EX_MEM_mem_to_reg;
+    reg         EX_MEM_trap;
+    reg         EX_MEM_halt;
+
+    // MEM/WB
+    reg         MEM_WB_valid;
+    reg  [31:0] MEM_WB_pc;
+    reg  [31:0] MEM_WB_inst;
+    reg  [31:0] MEM_WB_next_pc;
+    reg  [31:0] MEM_WB_result;
+    reg  [31:0] MEM_WB_load_data;
+    reg  [31:0] MEM_WB_rs1_data;
+    reg  [31:0] MEM_WB_rs2_data;
+    reg  [ 4:0] MEM_WB_rs1_addr;
+    reg  [ 4:0] MEM_WB_rs2_addr;
+    reg  [ 4:0] MEM_WB_rd;
+    reg         MEM_WB_RegWrite;
+    reg         MEM_WB_mem_to_reg;
+    reg         MEM_WB_trap;
+    reg         MEM_WB_halt;
+    reg  [31:0] MEM_WB_dmem_addr;
+    reg  [ 3:0] MEM_WB_dmem_mask;
+    reg         MEM_WB_dmem_ren;
+    reg         MEM_WB_dmem_wen;
+    reg  [31:0] MEM_WB_dmem_rdata;
+    reg  [31:0] MEM_WB_dmem_wdata;
+
+    // IF Instantiation
+    IF #(
+        .RESET_ADDR(RESET_ADDR)
+    ) if_stage (
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .i_imem_rdata(i_imem_rdata),
+        .redirect(redirect),
+        .redirect_pc(redirect_pc),
+        .IF_Stall(IF_Stall),
+        .o_imem_raddr(o_imem_raddr),
+        .PC_4(if_pc4),
+        .PC(if_pc),
+        .inst(if_inst)
+    );
+
+    // IF/ID Pipeline Register
+    always @(posedge i_clk) begin
+        if (i_rst || redirect) begin
+            IF_ID_valid <= 1'b0;
+            IF_ID_pc    <= 32'd0;
+            IF_ID_pc4   <= 32'd0;
+            IF_ID_inst  <= NOP;
+        end else if (!IF_Stall) begin
+            IF_ID_valid <= 1'b1;
+            IF_ID_pc    <= if_pc;
+            IF_ID_pc4   <= if_pc4;
+            IF_ID_inst  <= if_inst;
+        end
+    end
+
+    // ID Instantiation (Placeholder)
+
+    // ID/EX Pipeline Register
+    always @(posedge i_clk) begin
+        if (i_rst || ID_Stall) begin
+            // insert a bubble while ID is stalled. Clearing valid and the
+            // state-changing controls is enough to turn the slot into a NOP.
+            ID_EX_valid     <= 1'b0;
+            ID_EX_RegWrite  <= 1'b0;
+            ID_EX_mem_read  <= 1'b0;
+            ID_EX_mem_write <= 1'b0;
+            ID_EX_trap      <= 1'b0;
+            ID_EX_halt      <= 1'b0;
+            ID_EX_rd        <= 5'd0;
+            ID_EX_inst      <= NOP;
+        end else begin
+            ID_EX_valid        <= IF_ID_valid;
+            ID_EX_pc           <= IF_ID_pc;
+            ID_EX_pc4          <= IF_ID_pc4;
+            ID_EX_inst         <= IF_ID_inst;
+            ID_EX_next_pc      <= id_next_pc;
+            ID_EX_rs1_data     <= id_rs1_data;
+            ID_EX_rs2_data     <= id_rs2_data;
+            ID_EX_imm          <= id_imm;
+            ID_EX_rs1_addr     <= id_rs1_addr;
+            ID_EX_rs2_addr     <= id_rs2_addr;
+            ID_EX_rd           <= id_rd;
+            ID_EX_ALU_src      <= id_ALU_src;
+            ID_EX_auipc        <= id_auipc;
+            ID_EX_ALU_sub      <= id_ALU_sub;
+            ID_EX_ALU_sel      <= id_ALU_sel;
+            ID_EX_ALU_unsigned <= id_ALU_unsigned;
+            ID_EX_ALU_arith    <= id_ALU_arith;
+            ID_EX_mem_read     <= id_mem_read  & IF_ID_valid;
+            ID_EX_mem_write    <= id_mem_write & IF_ID_valid;
+            ID_EX_funct3       <= id_funct3;
+            ID_EX_RegWrite     <= id_reg_write & IF_ID_valid;
+            ID_EX_mem_to_reg   <= id_mem_to_reg;
+            ID_EX_link         <= id_link;
+            ID_EX_is_lui       <= id_is_lui;
+            ID_EX_trap         <= id_trap & IF_ID_valid;
+            ID_EX_halt         <= id_halt & IF_ID_valid;
+        end
+    end
+
+    // EX Instantiation (Placeholder)
+
+    // Fold the writeback source select into EX so later stages carry one value.
+    assign ex_result = ID_EX_link   ? ID_EX_pc4 :
+                       ID_EX_is_lui ? ID_EX_imm :
+                                      ex_alu_result;
+
+    // EX/MEM Pipeline Register
+    always @(posedge i_clk) begin
+        if (i_rst) begin
+            EX_MEM_valid     <= 1'b0;
+            EX_MEM_RegWrite  <= 1'b0;
+            EX_MEM_mem_read  <= 1'b0;
+            EX_MEM_mem_write <= 1'b0;
+            EX_MEM_trap      <= 1'b0;
+            EX_MEM_halt      <= 1'b0;
+            EX_MEM_rd        <= 5'd0;
+            EX_MEM_inst      <= NOP;
+        end else begin
+            EX_MEM_valid      <= ID_EX_valid;
+            EX_MEM_pc         <= ID_EX_pc;
+            EX_MEM_inst       <= ID_EX_inst;
+            EX_MEM_next_pc    <= ID_EX_next_pc;
+            EX_MEM_result     <= ex_result;
+            EX_MEM_rs1_data   <= ID_EX_rs1_data;
+            EX_MEM_rs2_data   <= ID_EX_rs2_data;
+            EX_MEM_rs1_addr   <= ID_EX_rs1_addr;
+            EX_MEM_rs2_addr   <= ID_EX_rs2_addr;
+            EX_MEM_rd         <= ID_EX_rd;
+            EX_MEM_mem_read   <= ID_EX_mem_read;
+            EX_MEM_mem_write  <= ID_EX_mem_write;
+            EX_MEM_funct3     <= ID_EX_funct3;
+            EX_MEM_RegWrite   <= ID_EX_RegWrite;
+            EX_MEM_mem_to_reg <= ID_EX_mem_to_reg;
+            EX_MEM_trap       <= ID_EX_trap;
+            EX_MEM_halt       <= ID_EX_halt;
+        end
+    end
+
+    // MEM Instantiation (Placeholder)
+
+    // MEM/WB Pipeline register
+    always @(posedge i_clk) begin
+        if (i_rst) begin
+            MEM_WB_valid    <= 1'b0;
+            MEM_WB_RegWrite <= 1'b0;
+            MEM_WB_trap     <= 1'b0;
+            MEM_WB_halt     <= 1'b0;
+            MEM_WB_rd       <= 5'd0;
+            MEM_WB_inst     <= NOP;
+            MEM_WB_dmem_ren <= 1'b0;
+            MEM_WB_dmem_wen <= 1'b0;
+        end else begin
+            MEM_WB_valid      <= EX_MEM_valid;
+            MEM_WB_pc         <= EX_MEM_pc;
+            MEM_WB_inst       <= EX_MEM_inst;
+            MEM_WB_next_pc    <= EX_MEM_next_pc;
+            MEM_WB_result     <= EX_MEM_result;
+            MEM_WB_load_data  <= mem_load_data;
+            MEM_WB_rs1_data   <= EX_MEM_rs1_data;
+            MEM_WB_rs2_data   <= EX_MEM_rs2_data;
+            MEM_WB_rs1_addr   <= EX_MEM_rs1_addr;
+            MEM_WB_rs2_addr   <= EX_MEM_rs2_addr;
+            MEM_WB_rd         <= EX_MEM_rd;
+            MEM_WB_RegWrite   <= EX_MEM_RegWrite;
+            MEM_WB_mem_to_reg <= EX_MEM_mem_to_reg;
+            MEM_WB_trap       <= EX_MEM_trap |
+                                 ((EX_MEM_mem_read | EX_MEM_mem_write) & mem_misaligned);
+            MEM_WB_halt       <= EX_MEM_halt;
+            MEM_WB_dmem_addr  <= o_dmem_addr;
+            MEM_WB_dmem_mask  <= o_dmem_mask;
+            MEM_WB_dmem_ren   <= o_dmem_ren;
+            MEM_WB_dmem_wen   <= o_dmem_wen;
+            MEM_WB_dmem_rdata <= i_dmem_rdata;
+            MEM_WB_dmem_wdata <= o_dmem_wdata;
+        end
+    end
+
+    // WB Instantiation
+    WB wb_stage (
+        .ALU_result(MEM_WB_result),
+        .Mem_data(MEM_WB_load_data),
+        .MemtoReg(MEM_WB_mem_to_reg),
+        .WB_data(wb_data)
+    );
+
+    // The retire signals should just the signals after the
+    // write back stage
+    assign o_retire_valid      = MEM_WB_valid;
+    assign o_retire_inst       = MEM_WB_inst;
+    assign o_retire_trap       = MEM_WB_trap;
+    assign o_retire_halt       = MEM_WB_halt;
+    assign o_retire_rs1_raddr  = MEM_WB_rs1_addr;
+    assign o_retire_rs2_raddr  = MEM_WB_rs2_addr;
+    assign o_retire_rs1_rdata  = MEM_WB_rs1_data;
+    assign o_retire_rs2_rdata  = MEM_WB_rs2_data;
+    assign o_retire_rd_waddr   = MEM_WB_RegWrite ? MEM_WB_rd : 5'd0;
+    assign o_retire_rd_wdata   = wb_data;
+    assign o_retire_dmem_addr  = MEM_WB_dmem_addr;
+    assign o_retire_dmem_mask  = MEM_WB_dmem_mask;
+    assign o_retire_dmem_ren   = MEM_WB_dmem_ren;
+    assign o_retire_dmem_wen   = MEM_WB_dmem_wen;
+    assign o_retire_dmem_rdata = MEM_WB_dmem_rdata;
+    assign o_retire_dmem_wdata = MEM_WB_dmem_wdata;
+    assign o_retire_pc         = MEM_WB_pc;
+    assign o_retire_next_pc    = MEM_WB_next_pc;
 endmodule
 
 `default_nettype wire

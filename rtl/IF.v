@@ -4,8 +4,11 @@ module IF#(
     input i_clk,
     input i_rst,
     input [31:0] i_imem_rdata,
-    input [1:0] PC_src,
-    input [31:0] PC_target,
+    // Taken branch/jump resolved in ID. Loads redirect_pc into the PC.
+    input redirect,
+    input [31:0] redirect_pc,
+    // Hold the PC while ID is stalled on a hazard.
+    input IF_Stall,
 
     output wire [31:0] o_imem_raddr,
     output wire [31:0] PC_4,
@@ -14,19 +17,18 @@ module IF#(
 );
 
 wire [31:0] next_pc;
-wire [31:0] pc_target;
-wire [31:0] jalr_target;
+
 // PC + 4 ADDER
 assign PC_4 = PC + 32'd4;
 
 // Next PC MUX
-assign next_pc = PC_src ? PC_4 : PC_target;
+assign next_pc = redirect ? redirect_pc : PC_4;
 
-// PC Register
+// PC Register. Redirect takes priority over a stall.
 always @(posedge i_clk) begin
     if (i_rst) begin
         PC <= RESET_ADDR;
-    end else begin
+    end else if (redirect || !IF_Stall) begin
         PC <= next_pc;
     end
 end
@@ -34,46 +36,5 @@ end
 // Instruction Memory
 assign o_imem_raddr = PC;
 assign inst = i_imem_rdata;
-
-endmodule
-
-
-module IF_ID_Reg (
-    input clk,
-    input rst_n,
-
-    input flush,      // Keep for branch/jump handling
-
-    input [31:0] PC_in,
-    input [31:0] PC4_in,
-    input [31:0] inst_in,
-
-    output reg [31:0] PC_out,
-    output reg [31:0] PC4_out,
-    output reg [31:0] inst_out
-);
-
-    always @(posedge clk) begin
-        if (!rst_n) begin
-            PC_out          <= 32'b0;
-            PC4_out         <= 32'b0;
-            // Reset instruction to NOP (ADDI x0, x0, 0)
-            inst_out <= 32'h00000013;
-        end
-
-        else if (flush) begin
-            PC_out          <= 32'b0;
-            PC4_out         <= 32'b0;
-            // Flush instruction to NOP (ADDI x0, x0, 0)
-            inst_out <= 32'h00000013;
-        end
-
-        else begin
-            PC_out          <= PC_in;
-            PC4_out         <= PC4_in;
-            // Pass through the instruction
-            inst_out <= inst_in;
-        end
-    end
 
 endmodule

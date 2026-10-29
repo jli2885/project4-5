@@ -4,7 +4,7 @@ module WB(
 
    input MemtoReg,
 
-   output reg [31:0] WB_data
+   output wire [31:0] WB_data
 );
 
     assign WB_data = MemtoReg ? Mem_data : ALU_result;
