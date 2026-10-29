@@ -2,8 +2,10 @@ module ID(
     input i_clk,
     input i_rst,
     input [31:0] inst,
-    input [31:0] pc4,
-    input [31:0] pc,
+    input [4:0] ID_EX_rd,
+    input [4:0] EX_MEM_rd,
+    input ID_EX_RegWrite,
+    input EX_MEM_RegWrite,
 
     output ALUsrc,
     output [1:0] ALUop,
@@ -15,7 +17,15 @@ module ID(
     output [31:0] o_rs1_rdata,
     output [31:0] o_rs2_rdata,
     output [31:0] o_immediate,
-    output take_branch
+    output take_branch,
+    output IF_Stall,
+    output ID_Stall,
+    output [4:0] i_rs1_raddr,
+    output [4:0] i_rs2_raddr,
+    output [4:0] i_rd_waddr,
+    output [6:0] funct7,
+    output [2:0] funct3,
+    output [6:0] opcode
 );
 
 control_unit u_control_unit(
@@ -71,8 +81,8 @@ branch_control u_branch_control(
 HDU u_HDU(
     .ID_EX_rd(ID_EX_rd),
     .EX_MEM_rd(EX_MEM_rd),
-    .IF_ID_rs1(IF_ID_rs1),
-    .IF_ID_rs2(IF_ID_rs2),
+    .IF_ID_rs1(i_rs1_raddr),
+    .IF_ID_rs2(i_rs2_raddr),
     .ID_EX_RegWrite(ID_EX_RegWrite),
     .EX_MEM_RegWrite(EX_MEM_RegWrite),
     .uses_rs1(uses_rs1),
@@ -81,15 +91,8 @@ HDU u_HDU(
     .ID_Stall(ID_Stall)
 );
 
-wire [2:0] funct3;
-wire [6:0] funct7;
-wire [4:0] i_rs1_raddr;
-wire [4:0] i_rs2_raddr;
-wire [4:0] i_rd_waddr;
 wire [5:0] i_format;
 wire uses_rs1;
 wire uses_rs2;
-wire [6:0] opcode;
-
 
 endmodule
