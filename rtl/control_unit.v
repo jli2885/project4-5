@@ -1,18 +1,14 @@
 module control_unit(
     input [6:0] opcode,
 
-    output reg [2:0] EX,        //ALUsrc[2],ALUop[1:0]
-    output reg [2:0] MEM,       //branch[2],memread[1],memwrite[0]
-    output reg [1:0] WB,        //regwrite[1],memtoreg[0]
+    output reg ALUsrc,
+    output reg [1:0] ALUop,
+    output reg branch,
+    output reg memread,
+    output reg memwrite,
+    output reg regwrite,
+    output reg memtoreg
 );
-
-reg ALUsrc;
-reg [1:0] ALUop;
-reg branch;
-reg memread;
-reg memwrite;
-reg regwrite;
-reg memtoreg;
 
 always @(*) begin
     case(opcode)
@@ -125,9 +121,6 @@ always @(*) begin
             memtoreg = 0;
         end
     endcase
-    EX = {ALUsrc, ALUop};
-    MEM = {branch, memread, memwrite};
-    WB = {regwrite, memtoreg};
 end
 
 endmodule

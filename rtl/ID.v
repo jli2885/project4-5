@@ -5,19 +5,28 @@ module ID(
     input [31:0] pc4,
     input [31:0] pc,
 
-    output [2:0] EX,
-    output [2:0] MEM,
-    output [2:0] WB,
+    output ALUsrc,
+    output [1:0] ALUop,
+    output branch,
+    output memread,
+    output memwrite,
+    output regwrite,
+    output memtoreg,
     output [31:0] o_rs1_rdata,
     output [31:0] o_rs2_rdata,
-    output [31:0] o_immediate
+    output [31:0] o_immediate,
+    output take_branch
 );
 
 control_unit u_control_unit(
-    .inst(inst),
-    .EX(EX),
-    .MEM(MEM),
-    .WB(WB)
+    .opcode(opcode),
+    .ALUsrc(ALUsrc),
+    .ALUop(ALUop),
+    .branch(branch),
+    .memread(memread),
+    .memwrite(memwrite),
+    .regwrite(regwrite),
+    .memtoreg(memtoreg)
 );
 
 decoder u_decoder(
@@ -33,7 +42,7 @@ decoder u_decoder(
     .uses_rs2(uses_rs2)
 );
 
-rf u_rf(
+rf #(.BYPASS_EN(1)) u_rf(
     .i_clk(i_clk),
     .i_rst(i_rst),
     .i_rs1_raddr(i_rs1_raddr),
@@ -46,7 +55,7 @@ rf u_rf(
 );
 
 imm u_imm(
-    .inst(inst),
+    .i_inst(inst),
     .i_format(i_format),
     .o_immediate(o_immediate)
 );
@@ -71,5 +80,16 @@ HDU u_HDU(
     .IF_Stall(IF_Stall),
     .ID_Stall(ID_Stall)
 );
+
+wire [2:0] funct3;
+wire [6:0] funct7;
+wire [4:0] i_rs1_raddr;
+wire [4:0] i_rs2_raddr;
+wire [4:0] i_rd_waddr;
+wire [5:0] i_format;
+wire uses_rs1;
+wire uses_rs2;
+wire [6:0] opcode;
+
 
 endmodule
