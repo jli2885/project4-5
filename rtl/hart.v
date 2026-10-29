@@ -138,6 +138,51 @@ module hart #(
 `endif
 );
     // Fill in your implementation here.
+    wire [31:0] pc;
+    wire [31:0] inst;
+    wire [31:0] pc_plus4;
+    wire [31:0] imm;
+    wire [ 5:0] imm_select;
+    wire [ 4:0] rd_addr;
+    wire [ 4:0] rs1_addr;
+    wire [ 4:0] rs2_addr;
+    wire [31:0] rs1_data;
+    wire [31:0] rs2_data;
+    wire [31:0] rd_wdata;
+    wire [ 1:0] PC_sel;
+    wire [ 2:0] ALU_sel;
+    wire        ALU_src;
+    wire        ALU_sub;
+    wire        ALU_arith;
+    wire        ALU_unsigned;
+    wire        reg_write;
+    wire        mem_write;
+    wire        mem_read;
+    wire        mem_to_reg;
+    wire        branch;
+    wire        jal;
+    wire        jalr;
+    wire        auipc;
+    wire [31:0] alu_op1;
+    wire [31:0] alu_op2;
+    wire [31:0] alu_result;
+    wire        alu_eq;
+    wire        alu_slt;
+    wire [31:0] load_data;
+    wire        dmem_misaligned;
+
+    localparam [6:0] OPCODE_LOAD   = 7'b0000011;
+    localparam [6:0] OPCODE_STORE  = 7'b0100011;
+    localparam [6:0] OPCODE_BRANCH = 7'b1100011;
+    localparam [6:0] OPCODE_JAL    = 7'b1101111;
+    localparam [6:0] OPCODE_JALR   = 7'b1100111;
+    localparam [6:0] OPCODE_LUI    = 7'b0110111;
+    localparam [6:0] OPCODE_AUIPC  = 7'b0010111;
+    localparam [6:0] OPCODE_OPIMM  = 7'b0010011;
+    localparam [6:0] OPCODE_OP     = 7'b0110011;
+    localparam [6:0] OPCODE_SYSTEM = 7'b1110011;
+
+    //IF-ID
 endmodule
 
 `default_nettype wire
