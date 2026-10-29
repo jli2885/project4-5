@@ -1,6 +1,5 @@
 module Data_Memory (
     // Input signals
-    input wire clk,
     input wire MemRead,
     input wire MemWrite,
     
