@@ -20,11 +20,6 @@ module ID(
     output [31:0] o_rs1_rdata,
     output [31:0] o_rs2_rdata,
     output [31:0] o_immediate,
-    // output take_branch,
-    // output IF_Stall,
-    // output ID_Stall,
-    // output [4:0] i_rs1_raddr,
-    // output [4:0] i_rs2_raddr,
     output [6:0] funct7,
     output [2:0] funct3,
     output [6:0] opcode
@@ -77,26 +72,6 @@ module ID(
         .o_immediate(o_immediate)
     );
 
-    // branch_control u_branch_control(
-    //     .branch(branch),
-    //     .funct3(funct3),
-    //     .o_rs1_rdata(o_rs1_rdata),
-    //     .o_rs2_rdata(o_rs2_rdata),
-    //     .take_branch(take_branch)
-    // );
-
-    // HDU u_HDU(
-    //     .ID_EX_rd(ID_EX_rd),
-    //     .EX_MEM_rd(EX_MEM_rd),
-    //     .IF_ID_rs1(i_rs1_raddr),
-    //     .IF_ID_rs2(i_rs2_raddr),
-    //     .ID_EX_RegWrite(ID_EX_RegWrite),
-    //     .EX_MEM_RegWrite(EX_MEM_RegWrite),
-    //     .uses_rs1(uses_rs1),
-    //     .uses_rs2(uses_rs2),
-    //     .IF_Stall(IF_Stall),
-    //     .ID_Stall(ID_Stall)
-    // );
 
     
 
