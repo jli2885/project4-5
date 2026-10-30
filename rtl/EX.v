@@ -20,7 +20,9 @@ module EX(
     wire [31:0] op2;
     wire [31:0] op1;
     assign op2 = ALUSrc ? immediate : rs2_rdata;
-    assign op1 = AUIPC ? pc : rs1_rdata;
+    assign op1 = AUIPC ? pc : 
+                 LUI ? 32'd0 :
+                       rs1_rdata;
 
     alu u_alu (
         .op1(op1),
