@@ -14,6 +14,8 @@ module ID(
     output wire branch,
     output wire [1:0] ALUop,
     output wire ALUsrc,
+    output wire [1:0] jump,
+    output wire AUIPC,
     
     output [31:0] o_rs1_rdata,
     output [31:0] o_rs2_rdata,
