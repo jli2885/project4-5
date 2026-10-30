@@ -5,26 +5,26 @@ module IF_ID_reg (
 
     input wire IF_Stall,
 
-    input wire [31:0] pc_in,
-    input wire [31:0] pc4_in,
-    input wire [31:0] inst_in,
+    input wire [31:0] in_pc,
+    input wire [31:0] in_pc4,
+    input wire [31:0] in_inst,
 
     output reg IF_ID_valid,
-    output reg [31:0] pc_out,
-    output reg [31:0] pc4_out,
-    output reg [31:0] inst_out
+    output reg [31:0] out_pc,
+    output reg [31:0] out_pc4,
+    output reg [31:0] out_inst
 );
     always @(posedge i_clk) begin
         if (i_rst || redirect) begin
             IF_ID_valid <= 1'b0;
-            pc_out      <= 32'd0;
-            pc4_out     <= 32'd0;
-            inst_out    <= 32'h00000013;
+            out_pc      <= 32'd0;
+            out_pc4     <= 32'd0;
+            out_inst    <= 32'h00000013;
         end else if (!IF_Stall) begin
             IF_ID_valid <= 1'b1;
-            pc_out      <= pc_in;
-            pc4_out     <= pc4_in;
-            inst_out    <= inst_in;
+            out_pc      <= in_pc;
+            out_pc4     <= in_pc4;
+            out_inst    <= in_inst;
         end
     end
 endmodule
