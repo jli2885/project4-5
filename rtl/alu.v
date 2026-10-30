@@ -1,163 +1,68 @@
-`default_nettype none
+module alu(
+    input [31:0] op1,
+    input [31:0] op2,
+    input [3:0] ALU_control,
+    input [2:0] funct3,
 
-// The arithmetic logic unit (ALU) is responsible for performing the core
-// calculations of the processor. It takes two 32-bit operands and outputs
-// a 32 bit result based on the selection operation - addition, comparison,
-// shift, or logical operation. This ALU is a purely combinational block, so
-// you should not attempt to add any registers or pipeline it.
-module alu (
-    // NOTE: Both 3'b010 and 3'b011 are used for set less than operations and
-    // your implementation should output the same result for both codes. The
-    // reason for this will become clear in project 3.
-    //
-    // Major operation selection.
-    // 3'b000: addition/subtraction if `i_sub` asserted
-    // 3'b001: shift left logical
-    // 3'b010,
-    // 3'b011: set less than/unsigned if `i_unsigned` asserted
-    // 3'b100: exclusive or
-    // 3'b101: shift right logical/arithmetic if `i_arith` asserted
-    // 3'b110: or
-    // 3'b111: and
-    input  wire [ 2:0] i_opsel,
-    // When asserted, addition operations should subtract instead.
-    // This is only used for `i_opsel == 3'b000` (addition/subtraction).
-    input  wire        i_sub,
-    // When asserted, comparison operations should be treated as unsigned.
-    // This is used for branch comparisons and set less than unsigned. For
-    // b ranch operations, the ALU result is not used, only the comparison
-    // results.
-    input  wire        i_unsigned,
-    // When asserted, right shifts should be treated as arithmetic instead of
-    // logical. This is only used for `i_opsel == 3'b101` (shift right).
-    input  wire        i_arith,
-    // First 32-bit input operand.
-    input  wire [31:0] i_op1,
-    // Second 32-bit input operand.
-    input  wire [31:0] i_op2,
-    // 32-bit output result. Any carry out should be ignored.
-    output wire [31:0] o_result,
-    // Equality result. This is used externally to determine if a branch
-    // should be taken.
-    output wire        o_eq,
-    // Set less than result. This is used externally to determine if a branch
-    // should be taken.
-    output wire        o_slt
+    output reg [31:0] ALU_result,
+    output reg zero
 );
-    localparam [2:0] OP_ADD  = 3'b000;
-    localparam [2:0] OP_SLL  = 3'b001;
-    localparam [2:0] OP_SLT  = 3'b010;
-    localparam [2:0] OP_SLTU = 3'b011;
-    localparam [2:0] OP_XOR  = 3'b100;
-    localparam [2:0] OP_SRL  = 3'b101;
-    localparam [2:0] OP_OR   = 3'b110;
-    localparam [2:0] OP_AND  = 3'b111;
 
-    reg [31:0] result;
-    reg        eq;
-    reg        slt;
+wire fill;
+wire [31:0] l1,l2,l4,l8,l16;
+wire [31:0] r1,r2,r4,r8,r16;
 
-    wire signed_lt;
-    wire cmp_lt;
-    wire [31:0] sll_s1;
-    wire [31:0] sll_s2;
-    wire [31:0] sll_s4;
-    wire [31:0] sll_s8;
-    wire [31:0] sll_s16;
-    wire [31:0] srl_s1;
-    wire [31:0] srl_s2;
-    wire [31:0] srl_s4;
-    wire [31:0] srl_s8;
-    wire [31:0] srl_s16;
-    wire [31:0] sra_s1;
-    wire [31:0] sra_s2;
-    wire [31:0] sra_s4;
-    wire [31:0] sra_s8;
-    wire [31:0] sra_s16;
+wire sign_lt;
 
-    assign signed_lt = (i_op1[31] ^ i_op2[31]) ? i_op1[31] : (i_op1 < i_op2);
-    assign cmp_lt = i_unsigned ? (i_op1 < i_op2) : signed_lt;
+assign fill = (ALU_control == 4'b0111) & op1[31];
 
-    // Constant-step barrel shifter (left).
-    assign sll_s1  = i_op2[0] ? {i_op1[30:0], 1'b0} : i_op1;
-    assign sll_s2  = i_op2[1] ? {sll_s1[29:0], 2'b00} : sll_s1;
-    assign sll_s4  = i_op2[2] ? {sll_s2[27:0], 4'b0000} : sll_s2;
-    assign sll_s8  = i_op2[3] ? {sll_s4[23:0], 8'b00000000} : sll_s4;
-    assign sll_s16 = i_op2[4] ? {sll_s8[15:0], 16'b0000000000000000} : sll_s8;
+assign l1 = op2[0] ? {op1[30:0], 1'b0} : op1;
+assign l2 = op2[1] ? {l1[29:0], 2'b0} : l1;
+assign l4 = op2[2] ? {l2[27:0], 4'b0} : l2;
+assign l8 = op2[3] ? {l4[23:0], 8'b0} : l4;
+assign l16 = op2[4] ? {l8[15:0], 16'b0} : l8;
 
-    // Constant-step barrel shifter (logical right).
-    assign srl_s1  = i_op2[0] ? {1'b0, i_op1[31:1]} : i_op1;
-    assign srl_s2  = i_op2[1] ? {2'b00, srl_s1[31:2]} : srl_s1;
-    assign srl_s4  = i_op2[2] ? {4'b0000, srl_s2[31:4]} : srl_s2;
-    assign srl_s8  = i_op2[3] ? {8'b00000000, srl_s4[31:8]} : srl_s4;
-    assign srl_s16 = i_op2[4] ? {16'b0000000000000000, srl_s8[31:16]} : srl_s8;
+assign r1 = op2[0] ? {fill, op1[31:1]} : op1;
+assign r2 = op2[1] ? {{2{fill}}, r1[31:2]} : r1;
+assign r4 = op2[2] ? {{4{fill}}, r2[31:4]} : r2;
+assign r8 = op2[3] ? {{8{fill}}, r4[31:8]} : r4;
+assign r16 = op2[4] ? {{16{fill}}, r8[31:16]} : r8;
 
-    // Constant-step barrel shifter (arithmetic right).
-    assign sra_s1  = i_op2[0] ? {i_op1[31], i_op1[31:1]} : i_op1;
-    assign sra_s2  = i_op2[1] ? {{2{sra_s1[31]}}, sra_s1[31:2]} : sra_s1;
-    assign sra_s4  = i_op2[2] ? {{4{sra_s2[31]}}, sra_s2[31:4]} : sra_s2;
-    assign sra_s8  = i_op2[3] ? {{8{sra_s4[31]}}, sra_s4[31:8]} : sra_s4;
-    assign sra_s16 = i_op2[4] ? {{16{sra_s8[31]}}, sra_s8[31:16]} : sra_s8;
+assign sign_lt = (op1[31] != op2[31]) ? op1[31] : (op1 < op2);
 
-    assign o_result = result;
-    assign o_eq = eq;
-    assign o_slt = slt;
+always @(*) begin
+    ALU_result = 32'b0;
+    zero = 1'b0;
 
-    always @(*) begin
-        result = 32'b0;
-        eq = (i_op1 == i_op2);
-        slt = cmp_lt;
-
-        case (i_opsel)
-        OP_ADD: begin
-            case (i_sub)
-            1'b0: begin
-                result = i_op1 + i_op2;
-            end
-            1'b1: begin
-                result = i_op1 - i_op2;
-            end
-            default: begin
-                result = i_op1 + i_op2;
-            end
+    case(ALU_control)
+        4'b0000: ALU_result = op1 + op2; //ADD
+        4'b0001: ALU_result = op1 - op2; //SUB
+        4'b0010: ALU_result = op1 & op2; //AND
+        4'b0011: ALU_result = op1 | op2; //OR
+        4'b0100: ALU_result = op1 ^ op2; //XOR
+        4'b0101: ALU_result = l16; //SLL
+        4'b0110: ALU_result = r16; //SRL
+        4'b0111: ALU_result = r16; //SRA
+        4'b1000: ALU_result = {31'b0, sign_lt}; //SLT
+        4'b1001: ALU_result = {31'b0, (op1 < op2)}; //SLTU
+        4'b1010: ALU_result = op2; //LUI
+        4'b1011: begin//branch
+            ALU_result = op1 - op2;
+            case(funct3)
+                3'b000: zero = (ALU_result == 32'b0) ? 1'b1 : 1'b0; //BEQ
+                3'b001: zero = (ALU_result != 32'b0) ? 1'b1 : 1'b0; //BNE
+                3'b100: zero = sign_lt; //BLT
+                3'b101: zero = ~sign_lt; //BGE
+                3'b110: zero = (op1 < op2) ? 1'b1 : 1'b0; //BLTU
+                3'b111: zero = (op1 >= op2) ? 1'b1 : 1'b0; //BGEU
+                default: zero = 1'b0;
             endcase
-        end
-        OP_SLL: begin
-            result = sll_s16;
-        end
-        OP_SLT, OP_SLTU: begin
-            slt = cmp_lt;
-            result = {31'b0, cmp_lt};
-        end
-        OP_XOR: begin
-            result = i_op1 ^ i_op2;
-        end
-        OP_SRL: begin
-            case (i_arith)
-            1'b0: begin
-                result = srl_s16;
-            end
-            1'b1: begin
-                result = sra_s16;
-            end
-            default: begin
-                result = srl_s16;
-            end
-            endcase
-        end
-        OP_OR: begin
-            result = i_op1 | i_op2;
-        end
-        OP_AND: begin
-            result = i_op1 & i_op2;
         end
         default: begin
-            result = 32'b0;
-            eq = (i_op1 == i_op2);
-            slt = 1'b0;
+            ALU_result = 32'b0;
+            zero = 1'b0;
         end
-        endcase
-    end
-endmodule
+    endcase
+end
 
-`default_nettype wire
+endmodule
