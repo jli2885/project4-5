@@ -33,9 +33,7 @@ module EX(
     assign is_auipc = (opcode == OPCODE_AUIPC);
     assign is_link  = (opcode == OPCODE_JAL) || (opcode == OPCODE_JALR);
 
-    assign alu_class = is_lui                          ? 2'b00 :
-                       (ALUOp == 2'b10 && !opcode[5])  ? 2'b11 :
-                                                         ALUOp;
+    assign alu_class = is_lui ? 2'b00 : (ALUOp == 2'b10 && !opcode[5])  ? 2'b11 : ALUOp;
 
     //ALU control
     ALU_Control alu_control (

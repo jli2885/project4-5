@@ -52,6 +52,8 @@ module ID(
     wire [5:0] i_format;
     wire rf_wen;
     wire take_branch;
+    wire is_jal  = (opcode == 7'b1101111);
+    wire is_jalr = (opcode == 7'b1100111);
 
     // Bubbles and flushed instructions must not write the register file
     assign rf_wen = MEM_WB_RegWrite && MEM_WB_valid;
@@ -122,12 +124,8 @@ module ID(
         .IF_Stall(IF_Stall),
         .ID_Stall(ID_Stall)
     );
-
-wire is_jal  = (opcode == 7'b1101111);
-wire is_jalr = (opcode == 7'b1100111);
-assign redirect_pc = is_jalr ? ((o_rs1_rdata + o_immediate) & 32'hFFFF_FFFE)
-                             : (pc + o_immediate);
-assign redirect    = (take_branch | is_jal | is_jalr) & !ID_Stall;
-assign next_pc     = redirect ? redirect_pc : pc4;   
+    assign redirect_pc = is_jalr ? ((o_rs1_rdata + o_immediate) & 32'hFFFF_FFFE) : (pc + o_immediate);
+    assign redirect    = (take_branch | is_jal | is_jalr) & !ID_Stall;
+    assign next_pc     = redirect ? redirect_pc : pc4;   
 
 endmodule
