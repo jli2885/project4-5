@@ -6,7 +6,7 @@ module Data_Memory (
     // Address and WriteData inputs
     input wire [31:0] ALU_result,
     input wire [31:0] WriteData,
-
+    input wire [2:0] funct3,
     // Output write back data
     output wire misaligned,
     output wire [31:0] ReadData,
@@ -70,10 +70,10 @@ module Data_Memory (
     assign o_dmem_mask = (o_dmem_ren || o_dmem_wen) ? byte_mask : 4'b0000;
 
     // Store Data Alignment
-    assign o_dmem_wdata = (byte_offset == 2'b00) ? Store_data :
-                          (byte_offset == 2'b01) ? {Store_data[23:0], 8'b0} :
-                          (byte_offset == 2'b10) ? {Store_data[15:0], 16'b0} :
-                          {Store_data[7:0], 24'b0};
+    assign o_dmem_wdata = (byte_offset == 2'b00) ? WriteData :
+                          (byte_offset == 2'b01) ? {WriteData[23:0], 8'b0} :
+                          (byte_offset == 2'b10) ? {WriteData[15:0], 16'b0} :
+                          {WriteData[7:0], 24'b0};
 
 
     // Load Data 

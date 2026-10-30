@@ -137,188 +137,372 @@ module hart #(
     ,`RVFI_OUTPUTS,
 `endif
 );
-    localparam [31:0] NOP = 32'h00000013; // addi x0, x0, 0
 
-    // IF Stage outputs 
+    localparam [31:0] EBREAK = 32'h00100073;
+
+    // IF
     wire [31:0] if_pc;
     wire [31:0] if_pc4;
     wire [31:0] if_inst;
 
-    // ID Stage outputs
-    wire id_RegWrite,
-    wire id_MemtoReg,
-    wire id_branch,
-    wire id_MemRead,
-    wire id_MemWrite,
-    wire [1:0] id_ALUOp,
-    wire id_ALUSrc,
+    // ID
+    wire        id_valid;
+    wire [31:0] id_pc;
+    wire [31:0] id_pc4;
+    wire [31:0] id_inst;
+    wire        id_RegWrite;
+    wire        id_MemtoReg;
+    wire        id_MemRead;
+    wire        id_MemWrite;
+    wire        id_branch;
+    wire [1:0]  id_ALUOp;
+    wire        id_ALUSrc;
+    wire [31:0] id_rs1_rdata;
+    wire [31:0] id_rs2_rdata;
+    wire [31:0] id_imm;
+    wire [4:0]  id_rs1;
+    wire [4:0]  id_rs2;
+    wire [4:0]  id_rd;
+    wire [6:0]  id_funct7;
+    wire [2:0]  id_funct3;
+    wire [6:0]  id_opcode;
+    wire [31:0] id_next_pc;
 
-    wire [31:0] id_pc,
-    wire [31:0] id_inst
-    wire [31:0] id_ReadData1,
-    wire [31:0] id_ReadData2,
-    wire [31:0] id_imm,
+    // Hazard / control-flow signals from ID
+    wire        redirect;
+    wire [31:0] redirect_pc;
+    wire        IF_Stall;
+    wire        ID_Stall;
 
-    // EX Stage outputs
-    wire ex_Zero,
-    wire ex_RegWrite,
-    wire ex_MemtoReg,
-    wire ex_branch,
-    wire ex_MemRead,
-    wire ex_MemWrite,
-    wire [31:0] ex_ALU_result,
-    wire [31:0] ex_WriteData,
-    wire [31:0] ex_Target_address,
-    wire [31:0] ex_inst,
+    // EX
+    wire        ex_valid;
+    wire        ex_RegWrite;
+    wire        ex_MemtoReg;
+    wire        ex_MemRead;
+    wire        ex_MemWrite;
+    wire        ex_branch;
+    wire [1:0]  ex_ALUOp;
+    wire        ex_ALUSrc;
+    wire [31:0] ex_rs1_rdata;
+    wire [31:0] ex_rs2_rdata;
+    wire [31:0] ex_imm;
+    wire [31:0] ex_pc;
+    wire [31:0] ex_pc4;
+    wire [31:0] ex_inst;
+    wire [31:0] ex_next_pc;
+    wire [4:0]  ex_rs1;
+    wire [4:0]  ex_rs2;
+    wire [4:0]  ex_rd;
+    wire [6:0]  ex_funct7;
+    wire [2:0]  ex_funct3;
+    wire [6:0]  ex_opcode;
+    wire [31:0] ex_result;
 
-    // MEM Stage outputs
-    wire mem_MemtoReg,
-    wire mem_RegWrite,
-    wire [31:0] mem_LoadData,
-    wire [31:0] mem_ALU_result,
+    // MEM
+    wire        mem_valid;
+    wire        mem_RegWrite;
+    wire        mem_MemtoReg;
+    wire        mem_MemRead;
+    wire        mem_MemWrite;
+    wire [2:0]  mem_funct3;
+    wire [4:0]  mem_rd;
+    wire [31:0] mem_ALU_result;
+    wire [31:0] mem_pc;
+    wire [31:0] mem_next_pc;
+    wire [31:0] mem_inst;
+    wire [4:0]  mem_rs1;
+    wire [4:0]  mem_rs2;
+    wire [31:0] mem_rs1_rdata;
+    wire [31:0] mem_rs2_rdata;
+    wire [31:0] mem_LoadData;
+    wire        mem_misaligned;
+    wire        mem_trap;
 
-    // WB Stage inputs
-    wire wb_MemtoReg,
-    wire [31:0] wb_Alu_result,
-    wire [31:0] wb_Mem_data,
-   
-    // WB Stage outputs
+    // WB
+    wire        wb_valid;
+    wire        wb_MemtoReg;
+    wire        wb_RegWrite;
+    wire [4:0]  wb_rd;
+    wire [31:0] wb_LoadData;
+    wire [31:0] wb_ALU_result;
     wire [31:0] wb_data;
+    wire        wb_trap;
+    wire [31:0] wb_pc;
+    wire [31:0] wb_next_pc;
+    wire [31:0] wb_inst;
+    wire [4:0]  wb_rs1;
+    wire [4:0]  wb_rs2;
+    wire [31:0] wb_rs1_rdata;
+    wire [31:0] wb_rs2_rdata;
+    wire [31:0] wb_dmem_addr;
+    wire [3:0]  wb_dmem_mask;
+    wire        wb_dmem_ren;
+    wire        wb_dmem_wen;
+    wire [31:0] wb_dmem_rdata;
+    wire [31:0] wb_dmem_wdata;
 
+    
     // IF Instantiation
     IF #(
         .RESET_ADDR(RESET_ADDR)
     ) if_stage (
         .i_clk(i_clk),
         .i_rst(i_rst),
-        .i_mem_rdata(i_imem_rdata),
-        // Hold
-        .redirect(),
-        .redirect_pc(),
-        .IF_Stall(),
-        .o_mem_raddr(o_imem_raddr),
+        .i_imem_rdata(i_imem_rdata),
+        .redirect(redirect),
+        .redirect_pc(redirect_pc),
+        .IF_Stall(IF_Stall),
+        .o_imem_raddr(o_imem_raddr),
         .PC_4(if_pc4),
         .PC(if_pc),
         .inst(if_inst)
     );
 
-    // IF/ID Pipeline Register
-    If_ID_reg if_id_reg (
+    // IF/ID Pipeline register
+    IF_ID_reg if_id_reg (
         .i_clk(i_clk),
         .i_rst(i_rst),
+        .redirect(redirect),
+        .IF_Stall(IF_Stall),
         .in_pc(if_pc),
         .in_pc4(if_pc4),
         .in_inst(if_inst),
+        .IF_ID_valid(id_valid),
         .out_pc(id_pc),
-        .out_pc4(),
+        .out_pc4(id_pc4),
         .out_inst(id_inst)
-        .IF_Stall(),
-        .redirect()
-        .IF_ID_valid()
     );
 
-    // ID Instantiation (Placeholder)
+    // ID Instantiation
     ID id_stage (
-        
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .inst(id_inst),
+        .pc(id_pc),
+        .pc4(id_pc4),
+        .ID_EX_rd(ex_rd),
+        .ID_EX_RegWrite(ex_RegWrite),
+        .EX_MEM_rd(mem_rd),
+        .EX_MEM_RegWrite(mem_RegWrite),
+        .WB_rd_data(wb_data),
+        .MEM_WB_rd(wb_rd),
+        .MEM_WB_RegWrite(wb_RegWrite),
+        .MEM_WB_valid(wb_valid),
+        .regwrite(id_RegWrite),
+        .memtoreg(id_MemtoReg),
+        .memread(id_MemRead),
+        .memwrite(id_MemWrite),
+        .branch(id_branch),
+        .ALUop(id_ALUOp),
+        .ALUsrc(id_ALUSrc),
+        .o_rs1_rdata(id_rs1_rdata),
+        .o_rs2_rdata(id_rs2_rdata),
+        .o_immediate(id_imm),
+        .rd_waddr(id_rd),
+        .redirect(redirect),
+        .redirect_pc(redirect_pc),
+        .next_pc(id_next_pc),
+        .IF_Stall(IF_Stall),
+        .ID_Stall(ID_Stall),
+        .i_rs1_raddr(id_rs1),
+        .i_rs2_raddr(id_rs2),
+        .funct7(id_funct7),
+        .funct3(id_funct3),
+        .opcode(id_opcode)
     );
 
-    // ID/EX Pipeline Register
+    // ID/EX Pipeline register
     ID_EX_reg id_ex_reg (
         .i_clk(i_clk),
         .i_rst(i_rst),
-        .inRegWrite(id_RegWrite),
-        .inMemtoReg(id_MemtoReg),
-        .inbranch(id_branch),
-        .inMemRead(id_MemRead),
-        .inMemWrite(id_MemWrite),
-        .inALUOp(id_ALUOp),
-        .inALUSrc(id_ALUSrc),
-        .in_pc(id_pc),
-        .in_inst(id_inst),
-        .in_ReadData1(id_ReadData1),
-        .in_ReadData2(id_ReadData2),
-        .in_imm(id_imm),
-        .outRegWrite(ex_RegWrite),
-        .outMemtoReg(ex_MemtoReg),
-        .outbranch(ex_branch),
-        .outMemRead(ex_MemRead),
-        .outMemWrite(ex_MemWrite),
-        .outALUOp(ex_ALUOp),
-        .outALUSrc(ex_ALUSrc),
+        .i_bubble(ID_Stall),
+        .ALUSrc(id_ALUSrc),
+        .ALUOp(id_ALUOp),
+        .branch(id_branch),
+        .memread(id_MemRead),
+        .memwrite(id_MemWrite),
+        .regwrite(id_RegWrite),
+        .memtoreg(id_MemtoReg),
+        .o_rs1_rdata(id_rs1_rdata),
+        .o_rs2_rdata(id_rs2_rdata),
+        .o_immediate(id_imm),
+        .pc(id_pc),
+        .pc4(id_pc4),
+        .i_rs1_raddr(id_rs1),
+        .i_rs2_raddr(id_rs2),
+        .i_rd_waddr(id_rd),
+        .funct7(id_funct7),
+        .funct3(id_funct3),
+        .opcode(id_opcode),
+        .valid(id_valid),
+        .inst(id_inst),
+        .next_pc(id_next_pc),
+        .out_ALUSrc(ex_ALUSrc),
+        .out_ALUOp(ex_ALUOp),
+        .out_branch(ex_branch),
+        .out_memread(ex_MemRead),
+        .out_memwrite(ex_MemWrite),
+        .out_regwrite(ex_RegWrite),
+        .out_memtoreg(ex_MemtoReg),
+        .out_o_rs1_rdata(ex_rs1_rdata),
+        .out_o_rs2_rdata(ex_rs2_rdata),
+        .out_o_immediate(ex_imm),
         .out_pc(ex_pc),
+        .out_pc4(ex_pc4),
+        .out_rs1(ex_rs1),
+        .out_rs2(ex_rs2),
+        .out_rd(ex_rd),
+        .out_funct7(ex_funct7),
+        .out_funct3(ex_funct3),
+        .out_opcode(ex_opcode),
+        .out_valid(ex_valid),
         .out_inst(ex_inst),
-        .out_ReadData1(ex_ReadData1),
-        .out_ReadData2(ex_ReadData2),
-        .out_imm(ex_imm)
+        .out_next_pc(ex_next_pc)
     );
-    // EX Instantiation (Placeholder)
 
-    // EX/MEM Pipeline Register
+    // EX Instantiation
+    EX ex_stage (
+        .rs1_rdata(ex_rs1_rdata),
+        .rs2_rdata(ex_rs2_rdata),
+        .immediate(ex_imm),
+        .pc(ex_pc),
+        .pc4(ex_pc4),
+        .ALUSrc(ex_ALUSrc),
+        .ALUOp(ex_ALUOp),
+        .funct7(ex_funct7),
+        .funct3(ex_funct3),
+        .opcode(ex_opcode),
+        .ex_result(ex_result)
+    );
+    // EX/MEM Pipeline register
     EX_MEM_reg ex_mem_reg (
         .i_clk(i_clk),
         .i_rst(i_rst),
-        .inZero(ex_Zero),
-        .inRegWrite(ex_RegWrite),
-        .inMemtoReg(ex_MemtoReg),
-        .inbranch(ex_branch),
-        .inMemRead(ex_MemRead),
-        .inMemWrite(ex_MemWrite),
-        .in_ALU_result(ex_ALU_result),
-        .in_WriteData(ex_WriteData),
-        .in_Target_address(ex_Target_address),
+        .in_valid(ex_valid),
+        .in_RegWrite(ex_RegWrite),
+        .in_MemtoReg(ex_MemtoReg),
+        .in_MemRead(ex_MemRead),
+        .in_MemWrite(ex_MemWrite),
+        .in_funct3(ex_funct3),
+        .in_rd(ex_rd),
+        .in_ALU_result(ex_result),
+        .in_pc(ex_pc),
+        .in_next_pc(ex_next_pc),
+        .in_inst(ex_inst),
+        .in_rs1(ex_rs1),
+        .in_rs2(ex_rs2),
+        .in_rs1_rdata(ex_rs1_rdata),
+        .in_rs2_rdata(ex_rs2_rdata),
+        .out_valid(mem_valid),
         .out_RegWrite(mem_RegWrite),
         .out_MemtoReg(mem_MemtoReg),
-        .out_branch(mem_branch),
         .out_MemRead(mem_MemRead),
         .out_MemWrite(mem_MemWrite),
+        .out_funct3(mem_funct3),
+        .out_rd(mem_rd),
         .out_ALU_result(mem_ALU_result),
-        .out_WriteData(mem_WriteData),
-        .out_Target_address(mem_Target_address)
-        .out_inst(mem_inst)
+        .out_pc(mem_pc),
+        .out_next_pc(mem_next_pc),
+        .out_inst(mem_inst),
+        .out_rs1(mem_rs1),
+        .out_rs2(mem_rs2),
+        .out_rs1_rdata(mem_rs1_rdata),
+        .out_rs2_rdata(mem_rs2_rdata)
     );
-    // MEM Instantiation (Placeholder)
 
+    // MEM Instantiation
+    MEM mem_stage (
+        .MemRead(mem_MemRead),
+        .MemWrite(mem_MemWrite),
+        .ALU_result(mem_ALU_result),
+        .WriteData(mem_rs2_rdata),
+        .funct3(mem_funct3),
+        .misaligned(mem_misaligned),
+        .ReadData(mem_LoadData),
+        .i_dmem_rdata(i_dmem_rdata),
+        .o_dmem_ren(o_dmem_ren),
+        .o_dmem_wen(o_dmem_wen),
+        .o_dmem_addr(o_dmem_addr),
+        .o_dmem_wdata(o_dmem_wdata),
+        .o_dmem_mask(o_dmem_mask)
+    );
+
+    // misaligned is computed for every instruction; only memory ops trap
+    assign mem_trap = (mem_MemRead || mem_MemWrite) && mem_misaligned;
     // MEM/WB Pipeline register
     MEM_WB_reg mem_wb_reg (
         .i_clk(i_clk),
         .i_rst(i_rst),
+        .in_valid(mem_valid),
         .in_MemtoReg(mem_MemtoReg),
         .in_RegWrite(mem_RegWrite),
+        .in_rd(mem_rd),
         .in_LoadData(mem_LoadData),
         .in_ALU_result(mem_ALU_result),
+        .in_trap(mem_trap),
+        .in_pc(mem_pc),
+        .in_next_pc(mem_next_pc),
+        .in_inst(mem_inst),
+        .in_rs1(mem_rs1),
+        .in_rs2(mem_rs2),
+        .in_rs1_rdata(mem_rs1_rdata),
+        .in_rs2_rdata(mem_rs2_rdata),
+        .in_dmem_addr(o_dmem_addr),
+        .in_dmem_mask(o_dmem_mask),
+        .in_dmem_ren(o_dmem_ren),
+        .in_dmem_wen(o_dmem_wen),
+        .in_dmem_rdata(i_dmem_rdata),
+        .in_dmem_wdata(o_dmem_wdata),
+        .out_valid(wb_valid),
         .out_MemtoReg(wb_MemtoReg),
         .out_RegWrite(wb_RegWrite),
-        .out_LoadData(wb_Mem_data),
-        .out_ALU_result(wb_Alu_result)
+        .out_rd(wb_rd),
+        .out_LoadData(wb_LoadData),
+        .out_ALU_result(wb_ALU_result),
+        .out_trap(wb_trap),
+        .out_pc(wb_pc),
+        .out_next_pc(wb_next_pc),
+        .out_inst(wb_inst),
+        .out_rs1(wb_rs1),
+        .out_rs2(wb_rs2),
+        .out_rs1_rdata(wb_rs1_rdata),
+        .out_rs2_rdata(wb_rs2_rdata),
+        .out_dmem_addr(wb_dmem_addr),
+        .out_dmem_mask(wb_dmem_mask),
+        .out_dmem_ren(wb_dmem_ren),
+        .out_dmem_wen(wb_dmem_wen),
+        .out_dmem_rdata(wb_dmem_rdata),
+        .out_dmem_wdata(wb_dmem_wdata)
     );
+
     // WB Instantiation
     WB wb_stage (
-        .ALU_result(wb_Alu_result),
-        .Mem_data(wb_Mem_data),
+        .ALU_result(wb_ALU_result),
+        .Mem_data(wb_LoadData),
         .MemtoReg(wb_MemtoReg),
         .WB_data(wb_data)
     );
 
-    // The retire signals should just the signals after the
-    // write back stage
-    assign o_retire_valid      = MEM_WB_valid;
-    assign o_retire_inst       = MEM_WB_inst;
-    assign o_retire_trap       = MEM_WB_trap;
-    assign o_retire_halt       = MEM_WB_halt;
-    assign o_retire_rs1_raddr  = MEM_WB_rs1_addr;
-    assign o_retire_rs2_raddr  = MEM_WB_rs2_addr;
-    assign o_retire_rs1_rdata  = MEM_WB_rs1_data;
-    assign o_retire_rs2_rdata  = MEM_WB_rs2_data;
-    assign o_retire_rd_waddr   = MEM_WB_RegWrite ? MEM_WB_rd : 5'd0;
+    // Retire the instruction in writeback. Bubbles and flushed
+    // instructions have valid cleared and do not retire.
+    assign o_retire_valid      = wb_valid;
+    assign o_retire_inst       = wb_inst;
+    assign o_retire_trap       = wb_trap;
+    assign o_retire_halt       = (wb_inst == EBREAK);
+    assign o_retire_rs1_raddr  = wb_rs1;
+    assign o_retire_rs2_raddr  = wb_rs2;
+    assign o_retire_rs1_rdata  = wb_rs1_rdata;
+    assign o_retire_rs2_rdata  = wb_rs2_rdata;
+    assign o_retire_rd_waddr   = wb_RegWrite ? wb_rd : 5'd0;
     assign o_retire_rd_wdata   = wb_data;
-    assign o_retire_dmem_addr  = MEM_WB_dmem_addr;
-    assign o_retire_dmem_mask  = MEM_WB_dmem_mask;
-    assign o_retire_dmem_ren   = MEM_WB_dmem_ren;
-    assign o_retire_dmem_wen   = MEM_WB_dmem_wen;
-    assign o_retire_dmem_rdata = MEM_WB_dmem_rdata;
-    assign o_retire_dmem_wdata = MEM_WB_dmem_wdata;
-    assign o_retire_pc         = MEM_WB_pc;
-    assign o_retire_next_pc    = MEM_WB_next_pc;
+    assign o_retire_dmem_addr  = wb_dmem_addr;
+    assign o_retire_dmem_mask  = wb_dmem_mask;
+    assign o_retire_dmem_ren   = wb_dmem_ren;
+    assign o_retire_dmem_wen   = wb_dmem_wen;
+    assign o_retire_dmem_rdata = wb_dmem_rdata;
+    assign o_retire_dmem_wdata = wb_dmem_wdata;
+    assign o_retire_pc         = wb_pc;
+    assign o_retire_next_pc    = wb_next_pc;
 endmodule
 
 `default_nettype wire
