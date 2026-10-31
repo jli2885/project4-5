@@ -12,11 +12,6 @@ module EX(
     input wire [6:0]  opcode,
     output wire [31:0] ex_result
 );
-
-    localparam [6:0] OPCODE_JAL   = 7'b1101111;
-    localparam [6:0] OPCODE_JALR  = 7'b1100111;
-    localparam [6:0] OPCODE_AUIPC = 7'b0010111;
-
     wire [31:0] alu_op1;
     wire [31:0] alu_op2;
     wire [31:0] alu_result;
@@ -29,11 +24,14 @@ module EX(
     wire        ALU_unsigned;
     wire [2:0]  ALU_sel;
 
-    assign is_lui   = (ALUOp == 2'b11);
-    assign is_auipc = (opcode == OPCODE_AUIPC);
-    assign is_link  = (opcode == OPCODE_JAL) || (opcode == OPCODE_JALR);
-
-    assign alu_class = is_lui ? 2'b00 : (ALUOp == 2'b10 && !opcode[5])  ? 2'b11 : ALUOp;
+    ex_type_detect ex_type_detect (
+        .ALUOp(ALUOp),
+        .opcode(opcode),
+        .is_lui(is_lui),
+        .is_auipc(is_auipc),
+        .is_link(is_link),
+        .alu_class(alu_class)
+    );
 
     //ALU control
     ALU_Control alu_control (
@@ -47,9 +45,7 @@ module EX(
     );
 
     //ALU src mux
-    assign alu_op1 = is_auipc ? pc :
-                     is_lui   ? 32'd0 :
-                                rs1_rdata;
+    assign alu_op1 = is_auipc ? pc : is_lui ? 32'd0 : rs1_rdata;
     assign alu_op2 = ALUSrc ? immediate : rs2_rdata;
 
     //ALU
