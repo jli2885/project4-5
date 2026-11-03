@@ -37,7 +37,6 @@ module rf #(
     input  wire [ 4:0] i_rd_waddr,
     input  wire [31:0] i_rd_wdata
 );
-    // TODO: Fill in your implementation here.
     reg [31:0] regs [31:0];
     genvar index;
 
