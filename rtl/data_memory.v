@@ -4,9 +4,10 @@ module Data_Memory (
     input wire MemWrite,
     
     // Address and WriteData inputs
+    input wire [2:0] funct3,
     input wire [31:0] ALU_result,
     input wire [31:0] WriteData,
-    input wire [2:0] funct3,
+
     // Output write back data
     output wire misaligned,
     output wire [31:0] ReadData,

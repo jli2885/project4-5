@@ -3,12 +3,10 @@ module IF#(
 )(
     input i_clk,
     input i_rst,
+    input PCsrc,
+    input if_stall,
     input [31:0] i_imem_rdata,
-    // Taken branch/jump resolved in ID. Loads redirect_pc into the PC.
-    input redirect,
-    input [31:0] redirect_pc,
-    // Hold the PC while ID is stalled on a hazard.
-    input IF_Stall,
+    input [31:0] target_pc,
 
     output wire [31:0] o_imem_raddr,
     output wire [31:0] PC_4,
@@ -22,15 +20,14 @@ wire [31:0] next_pc;
 assign PC_4 = PC + 32'd4;
 
 // Next PC MUX
-assign next_pc = redirect ? redirect_pc : PC_4;
+assign next_pc = PCsrc ? target_pc : (if_stall ? PC : PC_4);
 
-// PC Register. Redirect takes priority over a stall.
+// PC Register
 always @(posedge i_clk) begin
-    if (i_rst) begin
+    if (i_rst)
         PC <= RESET_ADDR;
-    end else if (redirect || !IF_Stall) begin
+    else if (!if_stall)
         PC <= next_pc;
-    end
 end
 
 // Instruction Memory
