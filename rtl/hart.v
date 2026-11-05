@@ -137,288 +137,233 @@ module hart #(
     ,`RVFI_OUTPUTS,
 `endif
 );
-
-    localparam [31:0] EBREAK = 32'h00100073;
-
-    // IF
+    localparam [31:0] NOP=32'h00000013;
     wire [31:0] if_pc;
     wire [31:0] if_pc4;
     wire [31:0] if_inst;
-
-    // ID
-    wire        id_valid;
-    wire [31:0] id_pc;
-    wire [31:0] id_pc4;
-    wire [31:0] id_inst;
-    wire        id_RegWrite;
-    wire        id_MemtoReg;
-    wire        id_MemRead;
-    wire        id_MemWrite;
-    wire        id_branch;
-    wire [1:0]  id_ALUOp;
-    wire        id_ALUSrc;
-    wire [31:0] id_rs1_rdata;
-    wire [31:0] id_rs2_rdata;
-    wire [31:0] id_imm;
-    wire [4:0]  id_rs1;
-    wire [4:0]  id_rs2;
-    wire [4:0]  id_rd;
-    wire [6:0]  id_funct7;
-    wire [2:0]  id_funct3;
-    wire [6:0]  id_opcode;
-    wire [31:0] id_next_pc;
-
-    // Hazard / control-flow signals from ID
-    wire        redirect;
-    wire [31:0] redirect_pc;
-    wire        IF_Stall;
-    wire        ID_Stall;
-
-    // EX
-    wire        ex_valid;
-    wire        ex_RegWrite;
-    wire        ex_MemtoReg;
-    wire        ex_MemRead;
-    wire        ex_MemWrite;
-    wire        ex_branch;
-    wire [1:0]  ex_ALUOp;
-    wire        ex_ALUSrc;
-    wire [31:0] ex_rs1_rdata;
-    wire [31:0] ex_rs2_rdata;
-    wire [31:0] ex_imm;
-    wire [31:0] ex_pc;
-    wire [31:0] ex_pc4;
-    wire [31:0] ex_inst;
-    wire [31:0] ex_next_pc;
-    wire [4:0]  ex_rs1;
-    wire [4:0]  ex_rs2;
-    wire [4:0]  ex_rd;
-    wire [6:0]  ex_funct7;
-    wire [2:0]  ex_funct3;
-    wire [6:0]  ex_opcode;
-    wire [31:0] ex_result;
-
-    // MEM
-    wire        mem_valid;
-    wire        mem_RegWrite;
-    wire        mem_MemtoReg;
-    wire        mem_MemRead;
-    wire        mem_MemWrite;
-    wire [2:0]  mem_funct3;
-    wire [4:0]  mem_rd;
-    wire [31:0] mem_ALU_result;
-    wire [31:0] mem_pc;
-    wire [31:0] mem_next_pc;
-    wire [31:0] mem_inst;
-    wire [4:0]  mem_rs1;
-    wire [4:0]  mem_rs2;
-    wire [31:0] mem_rs1_rdata;
-    wire [31:0] mem_rs2_rdata;
-    wire [31:0] mem_LoadData;
-    wire        mem_misaligned;
-    wire        mem_trap;
-
-    // WB
-    wire        wb_valid;
-    wire        wb_MemtoReg;
-    wire        wb_RegWrite;
-    wire [4:0]  wb_rd;
-    wire [31:0] wb_LoadData;
-    wire [31:0] wb_ALU_result;
+    reg [31:0] id_pc,id_pc4,id_inst;
+    reg ifid_valid;
+    wire [6:0] id_opcode,id_funct7;
+    wire [2:0] id_funct3;
+    wire [4:0] id_rs1_raddr,id_rs2_raddr,id_rd_waddr;
+    wire [31:0] id_rs1_rdata,id_rs2_rdata,id_imm;
+    wire id_regwrite,id_memtoreg,id_memread,id_memwrite,id_branch,id_ALUsrc,id_AUIPC;
+    wire [1:0] id_ALUop,id_jump;
+    reg idex_valid;
+    reg [31:0] ex_pc,ex_pc4,ex_inst,ex_rs1_rdata,ex_rs2_rdata,ex_imm;
+    reg [4:0] ex_rd_waddr,ex_rs1_raddr,ex_rs2_raddr;
+    reg [6:0] ex_funct7;
+    reg [2:0] ex_funct3;
+    reg [1:0] ex_ALUop,ex_jump;
+    reg ex_ALUsrc,ex_AUIPC,ex_regwrite,ex_memtoreg,ex_memread,ex_memwrite,ex_branch;
+    wire [31:0] ex_ALU_result,ex_branch_target,ex_jump_target;
+    wire ex_zero;
+    wire branch_redirect;
+    wire [31:0] target_pc;
+    wire stall_PC,stall_IFID,flush_IFID,flush_IDEX,data_hazard;
+    reg exmem_valid;
+    reg [31:0] mem_pc,mem_pc4,mem_inst,mem_next_pc,mem_ALU_result,mem_rs2_rdata,mem_rs1_rdata;
+    reg [4:0] mem_rd_waddr,mem_rs1_raddr,mem_rs2_raddr;
+    reg [2:0] mem_funct3;
+    reg mem_regwrite,mem_memtoreg,mem_memread,mem_memwrite;
+    wire [31:0] mem_ReadData;
+    wire mem_misaligned;
+    reg memwb_valid;
+    reg [31:0] wb_pc,wb_next_pc,wb_inst,wb_ALU_result,wb_ReadData;
+    reg [31:0] wb_rs1_rdata,wb_rs2_rdata,wb_dmem_addr,wb_dmem_rdata,wb_dmem_wdata;
+    reg [4:0] wb_rd_waddr,wb_rs1_raddr,wb_rs2_raddr;
+    reg [3:0] wb_dmem_mask;
+    reg wb_memread,wb_memwrite,wb_regwrite,wb_memtoreg,wb_trap;
     wire [31:0] wb_data;
-    wire        wb_trap;
-    wire [31:0] wb_pc;
-    wire [31:0] wb_next_pc;
-    wire [31:0] wb_inst;
-    wire [4:0]  wb_rs1;
-    wire [4:0]  wb_rs2;
-    wire [31:0] wb_rs1_rdata;
-    wire [31:0] wb_rs2_rdata;
-    wire [31:0] wb_dmem_addr;
-    wire [3:0]  wb_dmem_mask;
-    wire        wb_dmem_ren;
-    wire        wb_dmem_wen;
-    wire [31:0] wb_dmem_rdata;
-    wire [31:0] wb_dmem_wdata;
+    wire mem_trap;
 
+    // Branch and jump resolved in EX. The ALU zero output means that
+    // the selected branch condition is true (BEQ/BNE/BLT/BGE/BLTU/BGEU).
+    assign branch_redirect = idex_valid && ((ex_branch && ex_zero) || (ex_jump!=2'b00));
+    assign target_pc = (ex_jump!=2'b00)?ex_jump_target:ex_branch_target;
+
+    HDU u_hdu(
+        .IF_ID_inst(id_inst),
+        .IF_ID_valid(ifid_valid),
+        .ID_EX_valid(idex_valid),
+        .ID_EX_RegWrite(ex_regwrite),
+        .ID_EX_rd(ex_rd_waddr),
+        .EX_MEM_valid(exmem_valid),
+        .EX_MEM_RegWrite(mem_regwrite),
+        .EX_MEM_rd(mem_rd_waddr),
+        .MEM_WB_valid(memwb_valid),
+        .MEM_WB_RegWrite(wb_regwrite),
+        .MEM_WB_rd(wb_rd_waddr),
+        .redirect_ex(branch_redirect),
+        .stall_PC(stall_PC),
+        .stall_IFID(stall_IFID),
+        .flush_IFID(flush_IFID),
+        .flush_IDEX(flush_IDEX),
+        .data_hazard(data_hazard));
     
-    // IF Instantiation
-    IF #(
-        .RESET_ADDR(RESET_ADDR)
-    ) if_stage (
+    IF #(.RESET_ADDR(RESET_ADDR)) u_if(
         .i_clk(i_clk),
         .i_rst(i_rst),
+        .PCsrc(branch_redirect),
+        .if_stall(stall_PC),
         .i_imem_rdata(i_imem_rdata),
-        .redirect(redirect),
-        .redirect_pc(redirect_pc),
-        .IF_Stall(IF_Stall),
+        .target_pc(target_pc),
         .o_imem_raddr(o_imem_raddr),
         .PC_4(if_pc4),
         .PC(if_pc),
-        .inst(if_inst)
-    );
+        .inst(if_inst));
 
-    // IF/ID Pipeline register
-    IF_ID_reg if_id_reg (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .redirect(redirect),
-        .IF_Stall(IF_Stall),
-        .in_pc(if_pc),
-        .in_pc4(if_pc4),
-        .in_inst(if_inst),
-        .IF_ID_valid(id_valid),
-        .out_pc(id_pc),
-        .out_pc4(id_pc4),
-        .out_inst(id_inst)
-    );
+    // IF/ID Register: Flush > Stall > Normal.
+    // Redirect throws away a wrong-path instruction, while Stall holds it.
+    always @(posedge i_clk) begin
+        if(i_rst || flush_IFID) begin
+        ifid_valid<=1'b0;id_pc<=0;id_pc4<=0;id_inst<=NOP;
+        end else if(!stall_IFID) begin
+        ifid_valid<=1'b1;id_pc<=if_pc;id_pc4<=if_pc4;id_inst<=if_inst;
+        end
+    end
 
-    // ID Instantiation
-    ID id_stage (
+    ID u_id(
         .i_clk(i_clk),
         .i_rst(i_rst),
         .inst(id_inst),
-        .pc(id_pc),
-        .pc4(id_pc4),
-        .ID_EX_rd(ex_rd),
-        .ID_EX_RegWrite(ex_RegWrite),
-        .EX_MEM_rd(mem_rd),
-        .EX_MEM_RegWrite(mem_RegWrite),
-        .WB_rd_data(wb_data),
-        .MEM_WB_rd(wb_rd),
-        .MEM_WB_RegWrite(wb_RegWrite),
-        .MEM_WB_valid(wb_valid),
-        .regwrite(id_RegWrite),
-        .memtoreg(id_MemtoReg),
-        .memread(id_MemRead),
-        .memwrite(id_MemWrite),
-        .branch(id_branch),
-        .ALUop(id_ALUOp),
-        .ALUsrc(id_ALUSrc),
-        .o_rs1_rdata(id_rs1_rdata),
-        .o_rs2_rdata(id_rs2_rdata),
-        .o_immediate(id_imm),
-        .rd_waddr(id_rd),
-        .redirect(redirect),
-        .redirect_pc(redirect_pc),
-        .next_pc(id_next_pc),
-        .IF_Stall(IF_Stall),
-        .ID_Stall(ID_Stall),
-        .i_rs1_raddr(id_rs1),
-        .i_rs2_raddr(id_rs2),
-        .funct7(id_funct7),
-        .funct3(id_funct3),
-        .opcode(id_opcode)
-    );
-
-    // ID/EX Pipeline register
-    ID_EX_reg id_ex_reg (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .i_bubble(ID_Stall),
-        .ALUSrc(id_ALUSrc),
-        .ALUOp(id_ALUOp),
-        .branch(id_branch),
-        .memread(id_MemRead),
-        .memwrite(id_MemWrite),
-        .regwrite(id_RegWrite),
-        .memtoreg(id_MemtoReg),
-        .o_rs1_rdata(id_rs1_rdata),
-        .o_rs2_rdata(id_rs2_rdata),
-        .o_immediate(id_imm),
-        .pc(id_pc),
-        .pc4(id_pc4),
-        .i_rs1_raddr(id_rs1),
-        .i_rs2_raddr(id_rs2),
-        .i_rd_waddr(id_rd),
-        .funct7(id_funct7),
-        .funct3(id_funct3),
+        .wb_data(wb_data),
+        .wb_rd_waddr(wb_rd_waddr),
+        .wb_regwrite(wb_regwrite && memwb_valid),
         .opcode(id_opcode),
-        .valid(id_valid),
-        .inst(id_inst),
-        .next_pc(id_next_pc),
-        .out_ALUSrc(ex_ALUSrc),
-        .out_ALUOp(ex_ALUOp),
-        .out_branch(ex_branch),
-        .out_memread(ex_MemRead),
-        .out_memwrite(ex_MemWrite),
-        .out_regwrite(ex_RegWrite),
-        .out_memtoreg(ex_MemtoReg),
-        .out_o_rs1_rdata(ex_rs1_rdata),
-        .out_o_rs2_rdata(ex_rs2_rdata),
-        .out_o_immediate(ex_imm),
-        .out_pc(ex_pc),
-        .out_pc4(ex_pc4),
-        .out_rs1(ex_rs1),
-        .out_rs2(ex_rs2),
-        .out_rd(ex_rd),
-        .out_funct7(ex_funct7),
-        .out_funct3(ex_funct3),
-        .out_opcode(ex_opcode),
-        .out_valid(ex_valid),
-        .out_inst(ex_inst),
-        .out_next_pc(ex_next_pc)
+        .funct3(id_funct3),
+        .funct7(id_funct7),
+        .rs1_raddr(id_rs1_raddr),
+        .rs2_raddr(id_rs2_raddr),
+        .rd_waddr(id_rd_waddr),
+        .rs1_rdata(id_rs1_rdata),
+        .rs2_rdata(id_rs2_rdata),
+        .imm(id_imm),
+        .regwrite(id_regwrite),
+        .memtoreg(id_memtoreg),
+        .memread(id_memread),
+        .memwrite(id_memwrite),
+        .branch(id_branch),
+        .ALUop(id_ALUop),
+        .ALUsrc(id_ALUsrc),
+        .jump(id_jump),
+        .AUIPC(id_AUIPC)
     );
 
-    // EX Instantiation
-    EX ex_stage (
+    // ID/EX Register: a RAW stall injects a bubble, NOT a frozen EX stage.
+    // A taken branch also flushes the younger instruction from ID.
+    always @(posedge i_clk) begin
+        if(i_rst || flush_IDEX) begin
+            idex_valid<=0;
+            ex_pc<=0;
+            ex_pc4<=0;
+            ex_inst<=NOP;
+            ex_rs1_rdata<=0;
+            ex_rs2_rdata<=0;
+            ex_imm<=0;
+            ex_rd_waddr<=0;
+            ex_rs1_raddr<=0;
+            ex_rs2_raddr<=0;
+            ex_funct7<=0;
+            ex_funct3<=0;
+            ex_ALUop<=0;
+            ex_jump<=0;
+            ex_ALUsrc<=0;
+            ex_AUIPC<=0;
+            ex_regwrite<=0;
+            ex_memtoreg<=0;
+            ex_memread<=0;
+            ex_memwrite<=0;
+            ex_branch<=0;
+        end else begin
+            idex_valid<=ifid_valid;
+            ex_pc<=id_pc;
+            ex_pc4<=id_pc4;
+            ex_inst<=id_inst;
+            ex_rs1_rdata<=id_rs1_rdata;
+            ex_rs2_rdata<=id_rs2_rdata;
+            ex_imm<=id_imm;
+            ex_rd_waddr<=id_rd_waddr;
+            ex_rs1_raddr<=id_rs1_raddr;
+            ex_rs2_raddr<=id_rs2_raddr;
+            ex_funct7<=id_funct7;
+            ex_funct3<=id_funct3;
+            ex_ALUop<=id_ALUop;
+            ex_jump<=id_jump;
+            ex_ALUsrc<=id_ALUsrc;
+            ex_AUIPC<=id_AUIPC;
+            ex_regwrite<=id_regwrite;
+            ex_memtoreg<=id_memtoreg;
+            ex_memread<=id_memread;
+            ex_memwrite<=id_memwrite;
+            ex_branch<=id_branch;
+        end
+    end
+    EX u_ex(
+        .ALUOp(ex_ALUop),
+        .funct7(ex_funct7),
+        .funct3(ex_funct3),
+        .ALUSrc(ex_ALUsrc),
+        .AUIPC(ex_AUIPC),
+        .jump(ex_jump),
         .rs1_rdata(ex_rs1_rdata),
         .rs2_rdata(ex_rs2_rdata),
         .immediate(ex_imm),
         .pc(ex_pc),
-        .pc4(ex_pc4),
-        .ALUSrc(ex_ALUSrc),
-        .ALUOp(ex_ALUOp),
-        .funct7(ex_funct7),
-        .funct3(ex_funct3),
-        .opcode(ex_opcode),
-        .ex_result(ex_result)
-    );
-    // EX/MEM Pipeline register
-    EX_MEM_reg ex_mem_reg (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .in_valid(ex_valid),
-        .in_RegWrite(ex_RegWrite),
-        .in_MemtoReg(ex_MemtoReg),
-        .in_MemRead(ex_MemRead),
-        .in_MemWrite(ex_MemWrite),
-        .in_funct3(ex_funct3),
-        .in_rd(ex_rd),
-        .in_ALU_result(ex_result),
-        .in_pc(ex_pc),
-        .in_next_pc(ex_next_pc),
-        .in_inst(ex_inst),
-        .in_rs1(ex_rs1),
-        .in_rs2(ex_rs2),
-        .in_rs1_rdata(ex_rs1_rdata),
-        .in_rs2_rdata(ex_rs2_rdata),
-        .out_valid(mem_valid),
-        .out_RegWrite(mem_RegWrite),
-        .out_MemtoReg(mem_MemtoReg),
-        .out_MemRead(mem_MemRead),
-        .out_MemWrite(mem_MemWrite),
-        .out_funct3(mem_funct3),
-        .out_rd(mem_rd),
-        .out_ALU_result(mem_ALU_result),
-        .out_pc(mem_pc),
-        .out_next_pc(mem_next_pc),
-        .out_inst(mem_inst),
-        .out_rs1(mem_rs1),
-        .out_rs2(mem_rs2),
-        .out_rs1_rdata(mem_rs1_rdata),
-        .out_rs2_rdata(mem_rs2_rdata)
+        .zero(ex_zero),
+        .ALU_result(ex_ALU_result),
+        .branch_target(ex_branch_target),
+        .jump_target(ex_jump_target)
     );
 
-    // MEM Instantiation
-    MEM mem_stage (
-        .MemRead(mem_MemRead),
-        .MemWrite(mem_MemWrite),
+    // EX/MEM Register: it must keep advancing during front-end stalls.
+    // Jump instructions write PC+4 into rd using the ALU-result WB path.
+    always @(posedge i_clk) begin
+        if(i_rst) begin
+            exmem_valid<=0;
+            mem_pc<=0;
+            mem_pc4<=0;
+            mem_inst<=NOP;
+            mem_next_pc<=0;
+            mem_ALU_result<=0;
+            mem_rs2_rdata<=0;
+            mem_rs1_rdata<=0;
+            mem_rd_waddr<=0;
+            mem_rs1_raddr<=0;
+            mem_rs2_raddr<=0;
+            mem_funct3<=0;
+            mem_regwrite<=0;
+            mem_memtoreg<=0;
+            mem_memread<=0;
+            mem_memwrite<=0;
+        end else begin
+            exmem_valid<=idex_valid;
+            mem_pc<=ex_pc;
+            mem_pc4<=ex_pc4;
+            mem_inst<=ex_inst;
+            mem_next_pc<=branch_redirect?target_pc:ex_pc4;
+            mem_ALU_result<=(ex_jump!=2'b00)?ex_pc4:ex_ALU_result;
+            mem_rs2_rdata<=ex_rs2_rdata;
+            mem_rs1_rdata<=ex_rs1_rdata;
+            mem_rd_waddr<=ex_rd_waddr;
+            mem_rs1_raddr<=ex_rs1_raddr;
+            mem_rs2_raddr<=ex_rs2_raddr;
+            mem_funct3<=ex_funct3;
+            mem_regwrite<=ex_regwrite;
+            mem_memtoreg<=ex_memtoreg;
+            mem_memread<=ex_memread;
+            mem_memwrite<=ex_memwrite;
+        end
+    end
+
+    MEM u_mem(.
+        MemRead(mem_memread && exmem_valid),
+        .MemWrite(mem_memwrite && exmem_valid),
         .ALU_result(mem_ALU_result),
         .WriteData(mem_rs2_rdata),
         .funct3(mem_funct3),
         .misaligned(mem_misaligned),
-        .ReadData(mem_LoadData),
+        .ReadData(mem_ReadData),
         .i_dmem_rdata(i_dmem_rdata),
         .o_dmem_ren(o_dmem_ren),
         .o_dmem_wen(o_dmem_wen),
@@ -426,83 +371,81 @@ module hart #(
         .o_dmem_wdata(o_dmem_wdata),
         .o_dmem_mask(o_dmem_mask)
     );
+    assign mem_trap = (mem_memread && mem_memwrite) && mem_misaligned;
 
-    // misaligned is computed for every instruction; only memory ops trap
-    assign mem_trap = (mem_MemRead || mem_MemWrite) && mem_misaligned;
-    // MEM/WB Pipeline register
-    MEM_WB_reg mem_wb_reg (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .in_valid(mem_valid),
-        .in_MemtoReg(mem_MemtoReg),
-        .in_RegWrite(mem_RegWrite),
-        .in_rd(mem_rd),
-        .in_LoadData(mem_LoadData),
-        .in_ALU_result(mem_ALU_result),
-        .in_trap(mem_trap),
-        .in_pc(mem_pc),
-        .in_next_pc(mem_next_pc),
-        .in_inst(mem_inst),
-        .in_rs1(mem_rs1),
-        .in_rs2(mem_rs2),
-        .in_rs1_rdata(mem_rs1_rdata),
-        .in_rs2_rdata(mem_rs2_rdata),
-        .in_dmem_addr(o_dmem_addr),
-        .in_dmem_mask(o_dmem_mask),
-        .in_dmem_ren(o_dmem_ren),
-        .in_dmem_wen(o_dmem_wen),
-        .in_dmem_rdata(i_dmem_rdata),
-        .in_dmem_wdata(o_dmem_wdata),
-        .out_valid(wb_valid),
-        .out_MemtoReg(wb_MemtoReg),
-        .out_RegWrite(wb_RegWrite),
-        .out_rd(wb_rd),
-        .out_LoadData(wb_LoadData),
-        .out_ALU_result(wb_ALU_result),
-        .out_trap(wb_trap),
-        .out_pc(wb_pc),
-        .out_next_pc(wb_next_pc),
-        .out_inst(wb_inst),
-        .out_rs1(wb_rs1),
-        .out_rs2(wb_rs2),
-        .out_rs1_rdata(wb_rs1_rdata),
-        .out_rs2_rdata(wb_rs2_rdata),
-        .out_dmem_addr(wb_dmem_addr),
-        .out_dmem_mask(wb_dmem_mask),
-        .out_dmem_ren(wb_dmem_ren),
-        .out_dmem_wen(wb_dmem_wen),
-        .out_dmem_rdata(wb_dmem_rdata),
-        .out_dmem_wdata(wb_dmem_wdata)
-    );
-
-    // WB Instantiation
-    WB wb_stage (
+    // MEM/WB Register: older instructions continue while IF/ID is held.
+    // External data-memory writes take effect on the MEM-stage rising edge.
+    always @(posedge i_clk) begin
+        if(i_rst) begin
+            memwb_valid<=0;
+            wb_pc<=0;
+            wb_next_pc<=0;
+            wb_inst<=NOP;
+            wb_ALU_result<=0;
+            wb_ReadData<=0;
+            wb_rs1_rdata<=0;
+            wb_rs2_rdata<=0;
+            wb_rd_waddr<=0;
+            wb_rs1_raddr<=0;
+            wb_rs2_raddr<=0;
+            wb_dmem_addr<=0;
+            wb_dmem_rdata<=0;
+            wb_dmem_wdata<=0;
+            wb_dmem_mask<=0;
+            wb_memread<=0;
+            wb_memwrite<=0;
+            wb_regwrite<=0;
+            wb_memtoreg<=0;
+            wb_trap<=0;
+        end else begin
+            memwb_valid<=exmem_valid;
+            wb_pc<=mem_pc;
+            wb_next_pc<=mem_next_pc;
+            wb_inst<=mem_inst;
+            wb_ALU_result<=mem_ALU_result;
+            wb_ReadData<=mem_ReadData;
+            wb_rs1_rdata<=mem_rs1_rdata;
+            wb_rs2_rdata<=mem_rs2_rdata;
+            wb_rd_waddr<=mem_rd_waddr;
+            wb_rs1_raddr<=mem_rs1_raddr;
+            wb_rs2_raddr<=mem_rs2_raddr;
+            wb_dmem_addr<=o_dmem_addr;
+            wb_dmem_rdata<=i_dmem_rdata;
+            wb_dmem_wdata<=o_dmem_wdata;
+            wb_dmem_mask<=o_dmem_mask;
+            wb_memread<=o_dmem_ren;
+            wb_memwrite<=o_dmem_wen;
+            wb_regwrite<=mem_regwrite;
+            wb_memtoreg<=mem_memtoreg;
+            wb_trap<=exmem_valid && mem_trap;
+        end
+    end
+    WB u_wb(
         .ALU_result(wb_ALU_result),
-        .Mem_data(wb_LoadData),
-        .MemtoReg(wb_MemtoReg),
+        .Mem_data(wb_ReadData),
+        .MemtoReg(wb_memtoreg),
         .WB_data(wb_data)
     );
-
-    // Retire the instruction in writeback. Bubbles and flushed
-    // instructions have valid cleared and do not retire.
-    assign o_retire_valid      = wb_valid;
-    assign o_retire_inst       = wb_inst;
-    assign o_retire_trap       = wb_trap;
-    assign o_retire_halt       = (wb_inst == EBREAK);
-    assign o_retire_rs1_raddr  = wb_rs1;
-    assign o_retire_rs2_raddr  = wb_rs2;
-    assign o_retire_rs1_rdata  = wb_rs1_rdata;
-    assign o_retire_rs2_rdata  = wb_rs2_rdata;
-    assign o_retire_rd_waddr   = wb_RegWrite ? wb_rd : 5'd0;
-    assign o_retire_rd_wdata   = wb_data;
-    assign o_retire_dmem_addr  = wb_dmem_addr;
-    assign o_retire_dmem_mask  = wb_dmem_mask;
-    assign o_retire_dmem_ren   = wb_dmem_ren;
-    assign o_retire_dmem_wen   = wb_dmem_wen;
-    assign o_retire_dmem_rdata = wb_dmem_rdata;
-    assign o_retire_dmem_wdata = wb_dmem_wdata;
-    assign o_retire_pc         = wb_pc;
-    assign o_retire_next_pc    = wb_next_pc;
+    // The retire signals should just the signals after the
+    // write back stage
+    assign o_retire_valid=memwb_valid;
+    assign o_retire_inst=wb_inst;
+    assign o_retire_trap=wb_trap;
+    assign o_retire_halt=memwb_valid && wb_inst==32'h00100073;
+    assign o_retire_rs1_raddr=wb_rs1_raddr;
+    assign o_retire_rs2_raddr=wb_rs2_raddr;
+    assign o_retire_rs1_rdata=wb_rs1_rdata;
+    assign o_retire_rs2_rdata=wb_rs2_rdata;
+    assign o_retire_rd_waddr=(wb_regwrite && memwb_valid)?wb_rd_waddr:5'd0;
+    assign o_retire_rd_wdata=wb_data;
+    assign o_retire_dmem_addr=wb_dmem_addr;
+    assign o_retire_dmem_mask=wb_dmem_mask;
+    assign o_retire_dmem_ren=wb_memread;
+    assign o_retire_dmem_wen=wb_memwrite;
+    assign o_retire_dmem_rdata=wb_dmem_rdata;
+    assign o_retire_dmem_wdata=wb_dmem_wdata;
+    assign o_retire_pc=wb_pc;
+    assign o_retire_next_pc=wb_next_pc;
 endmodule
 
 `default_nettype wire
